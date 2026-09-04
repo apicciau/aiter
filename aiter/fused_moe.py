@@ -1388,6 +1388,7 @@ def get_ksplit(token, topk, expert, inter_dim, model_dim):
 
 cfg_2stages = None
 cfg_2stages_by_file = {}
+_seen_fmoe_shapes = set()
 # fmt: off
 fused_moe_1stage_dict = {
     "gfx942":
@@ -2434,6 +2435,25 @@ def get_2stage_cfgs(
         return result
 
     cfg = _lookup_cfg(active_cfg_2stages)
+    if (
+        cfg is None
+        and config_file is None
+        and keys not in _seen_fmoe_shapes
+        and os.environ.get("AITER_TUNE_FMOE", "0") == "1"
+    ):
+        with open(untune_file, "a") as f:
+            if os.path.getsize(untune_file) == 0:
+                f.write(
+                    "token,model_dim,inter_dim,expert,topk,act_type,"
+                    "dtype,q_dtype_a,q_dtype_w,q_type,use_g1u1,doweight_stage1"
+                )
+            q_dtype_ws = q_dtype_w if q_dtype_w != torch.uint32 else "torch.int4"
+            f.write(
+                f"\n{token},{model_dim},{inter_dim},{expert},{topk},{activation},"
+                f"{dtype},{q_dtype_a},{q_dtype_ws},{q_type},"
+                f"{int(use_g1u1)},{int(doweight_stage1)}"
+            )
+        _seen_fmoe_shapes.add(keys)
     if (
         cfg is None
         and config_file is None
